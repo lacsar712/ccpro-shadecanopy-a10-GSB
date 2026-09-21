@@ -46,13 +46,18 @@ onMounted(async () => {
         <div class="label">今日排程轮灌</div>
         <div class="value">{{ stats.irrigationScheduledToday }}</div>
       </div>
+      <div class="stat">
+        <div class="label">雾化配额日行数</div>
+        <div class="value">{{ stats.fogQuotaTodayCount }}</div>
+      </div>
     </div>
 
     <div class="panel" style="margin-top: 18px">
       <h3 style="margin-top:0;color:var(--earth-deep)">业务说明</h3>
       <p style="color:var(--muted);margin:0;line-height:1.7">
         本系统面向温室「分区气候日志与轮灌计划」，不涉及考勤 OA 或库存出入库。
-        可在侧栏进入温室、分区、气候与轮灌模块进行 CRUD 操作。
+        可在侧栏进入温室、分区、气候、轮灌与雾化配额模块进行 CRUD 操作；
+        雾化配额按分区 + 作业日限定时长，消费与气候湿度记录在同一数据库事务内联锁写入。
       </p>
     </div>
   </div>

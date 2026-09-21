@@ -311,6 +311,14 @@ textarea:focus {
   margin: 8px 0;
 }
 
+.success {
+  color: var(--leaf-deep);
+  background: #e4efdc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 8px 0;
+}
+
 .login-wrap {
   min-height: 100vh;
   display: grid;

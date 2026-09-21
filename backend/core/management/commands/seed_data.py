@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core.models import ClimateLog, Greenhouse, IrrigationCycle, Zone
+from core.models import ClimateLog, FogDutyQuota, Greenhouse, IrrigationCycle, Zone
 
 User = get_user_model()
 
@@ -118,6 +118,31 @@ class Command(BaseCommand):
                     par_umol=Decimal("50.00"),
                     co2_ppm=Decimal("720.00"),
                 ),
+                # 雾化消费联锁写入的高湿记录（湿度 ∈ [70, 95]）
+                ClimateLog(
+                    zone=z1,
+                    recorded_at=now - timedelta(hours=1),
+                    temp_c=Decimal("23.50"),
+                    humidity_pct=Decimal("86.00"),
+                    par_umol=Decimal("360.00"),
+                    co2_ppm=Decimal("640.00"),
+                ),
+                ClimateLog(
+                    zone=z2,
+                    recorded_at=now - timedelta(hours=2),
+                    temp_c=Decimal("24.20"),
+                    humidity_pct=Decimal("90.00"),
+                    par_umol=Decimal("330.00"),
+                    co2_ppm=Decimal("610.00"),
+                ),
+                ClimateLog(
+                    zone=z1,
+                    recorded_at=now - timedelta(days=1, hours=4),
+                    temp_c=Decimal("22.80"),
+                    humidity_pct=Decimal("84.00"),
+                    par_umol=Decimal("300.00"),
+                    co2_ppm=Decimal("660.00"),
+                ),
             ]
         )
 
@@ -162,9 +187,41 @@ class Command(BaseCommand):
             ]
         )
 
+        today_date = timezone.localdate()
+        FogDutyQuota.objects.bulk_create(
+            [
+                FogDutyQuota(
+                    zone=z1,
+                    work_date=today_date,
+                    max_hours=Decimal("4.00"),
+                    used_minutes=30,
+                ),
+                # 已满额：再消费必触发 409 超配额失败（演示联锁拦截）
+                FogDutyQuota(
+                    zone=z2,
+                    work_date=today_date,
+                    max_hours=Decimal("1.00"),
+                    used_minutes=60,
+                ),
+                FogDutyQuota(
+                    zone=z4,
+                    work_date=today_date,
+                    max_hours=Decimal("2.50"),
+                    used_minutes=0,
+                ),
+                FogDutyQuota(
+                    zone=z1,
+                    work_date=today_date - timedelta(days=1),
+                    max_hours=Decimal("3.00"),
+                    used_minutes=180,
+                ),
+            ]
+        )
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"种子完成：温室 {Greenhouse.objects.count()}，分区 {Zone.objects.count()}，"
-                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}"
+                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}，"
+                f"雾化配额 {FogDutyQuota.objects.count()}"
             )
         )

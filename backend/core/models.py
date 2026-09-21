@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
@@ -69,6 +71,39 @@ class ClimateLog(models.Model):
 
     def __str__(self):
         return f"Climate@{self.zone_id} {self.recorded_at}"
+
+
+class FogDutyQuota(models.Model):
+    """雾化值班配额：按分区 + 作业日限制雾化作业时长。"""
+
+    zone = models.ForeignKey(
+        Zone, on_delete=models.CASCADE, related_name="fog_duty_quotas"
+    )
+    work_date = models.DateField()
+    max_hours = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
+    used_minutes = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-work_date", "zone_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["zone", "work_date"],
+                name="uniq_fog_quota_zone_date",
+            )
+        ]
+
+    @property
+    def max_minutes(self):
+        return int(self.max_hours * 60)
+
+    def __str__(self):
+        return f"FogQuota@{self.zone_id} {self.work_date} ({self.used_minutes}/{self.max_minutes}min)"
 
 
 class IrrigationCycle(models.Model):

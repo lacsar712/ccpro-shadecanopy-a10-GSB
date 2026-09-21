@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     ClimateLogViewSet,
+    FogDutyQuotaViewSet,
     GreenhouseViewSet,
     IrrigationCycleViewSet,
     ZoneViewSet,
@@ -14,6 +15,7 @@ router.register("greenhouses", GreenhouseViewSet, basename="greenhouse")
 router.register("zones", ZoneViewSet, basename="zone")
 router.register("climate-logs", ClimateLogViewSet, basename="climate-log")
 router.register("irrigation-cycles", IrrigationCycleViewSet, basename="irrigation-cycle")
+router.register("fog-quotas", FogDutyQuotaViewSet, basename="fog-quota")
 
 urlpatterns = [
     path("dashboard/", dashboard_stats, name="dashboard"),

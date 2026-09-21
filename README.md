@@ -26,6 +26,7 @@
 | `grower` | `123456` | grower（种植员） |
 
 启动时 `entrypoint.sh` 会执行 `migrate` + `seed_data` 自动写入账号与示例业务数据。
+种子含雾化配额演示数据：含一条**已满额**配额（A-02 今日 1h/已用 60 分），对其再消费必触发 **409 超配额失败**，可直接验证联锁拦截。
 
 ## 快速启动
 
@@ -49,7 +50,12 @@ docker compose down
 3. **Zone**：greenhouseId / zoneCode / cropName / status(`idle|growing|fallow`)；同温室 zoneCode 唯一
 4. **ClimateLog**：zoneId / recordedAt / tempC / humidityPct / parUmol / co2Ppm；**humidityPct ∈ [20, 100]**
 5. **IrrigationCycle**：zoneId / startAt / durationMin / waterLiters / status(`scheduled|running|done|skipped`)
-6. **Dashboard**：温室数、growing 分区数、近 24h 气候日志数、今日 scheduled 轮灌数 → `GET /api/dashboard/`
+6. **FogDutyQuota（雾化值班配额）**：zoneId / workDate / maxHours / usedMinutes（默认 0，只读）；**同区同日唯一**，**maxHours 须为正数**
+   - 消费接口 `POST /api/fog-quotas/{id}/consume/`，入参 `minutes`(≥1) / `humidityPct`(∈ [70, 95]) / `tempC`(可选，默认 25)
+   - 仅在种（`growing`）分区允许消费；空闲 / 休耕返回 **409** 并回显 `zoneStatus` 与 `usedMinutes`
+   - 累计 `usedMinutes + minutes > maxHours × 60` 返回 **409** 并回显 `usedMinutes` / `maxMinutes`
+   - 消费成功时，**同一数据库事务**内累加已用分钟并追加一条该区气候记录（湿度 ∈ [70, 95]）；只改配额不写气候不成立
+7. **Dashboard**：温室数、growing 分区数、近 24h 气候日志数、今日 scheduled 轮灌数、**雾化配额日行数**（`fogQuotaTodayCount`，与配额表当日行数一致）→ `GET /api/dashboard/`
 
 ## API 一览
 
@@ -62,6 +68,8 @@ docker compose down
 | CRUD | `/api/zones/?greenhouseId=&status=` |
 | CRUD | `/api/climate-logs/?zoneId=` |
 | CRUD | `/api/irrigation-cycles/?zoneId=&status=` |
+| CRUD | `/api/fog-quotas/?zoneId=&workDate=` |
+| POST | `/api/fog-quotas/{id}/consume/` |
 | GET | `/api/dashboard/` |
 
 字段对外使用 camelCase（如 `areaM2`、`zoneCode`、`humidityPct`）。
@@ -104,7 +112,7 @@ ShadeCanopy-01/
 │   ├── manage.py
 │   ├── config/            # settings / urls
 │   ├── accounts/          # 自定义 User + role
-│   └── core/              # 温室/分区/气候/轮灌 + seed_data
+│   └── core/              # 温室/分区/气候/轮灌/雾化配额 + seed_data
 └── frontend/
     ├── Dockerfile
     ├── nginx.conf         # 静态资源 + /api 反代

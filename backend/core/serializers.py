@@ -1,6 +1,9 @@
+from decimal import Decimal
+
+from django.core.validators import MaxValueValidator, MinValueValidator
 from rest_framework import serializers
 
-from .models import ClimateLog, Greenhouse, IrrigationCycle, Zone
+from .models import ClimateLog, FogDutyQuota, Greenhouse, IrrigationCycle, Zone
 
 
 class GreenhouseSerializer(serializers.ModelSerializer):
@@ -142,3 +145,79 @@ class IrrigationCycleSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class FogDutyQuotaSerializer(serializers.ModelSerializer):
+    zoneId = serializers.PrimaryKeyRelatedField(
+        source="zone", queryset=Zone.objects.all()
+    )
+    workDate = serializers.DateField(source="work_date")
+    maxHours = serializers.DecimalField(
+        source="max_hours", max_digits=5, decimal_places=2
+    )
+    usedMinutes = serializers.IntegerField(source="used_minutes", read_only=True)
+    maxMinutes = serializers.SerializerMethodField()
+    zoneCode = serializers.CharField(source="zone.zone_code", read_only=True)
+    zoneStatus = serializers.CharField(source="zone.status", read_only=True)
+    greenhouseName = serializers.CharField(
+        source="zone.greenhouse.name", read_only=True
+    )
+
+    class Meta:
+        model = FogDutyQuota
+        fields = (
+            "id",
+            "zoneId",
+            "zoneCode",
+            "zoneStatus",
+            "greenhouseName",
+            "workDate",
+            "maxHours",
+            "maxMinutes",
+            "usedMinutes",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "zoneCode",
+            "zoneStatus",
+            "greenhouseName",
+            "maxMinutes",
+            "usedMinutes",
+            "created_at",
+            "updated_at",
+        )
+
+    def get_maxMinutes(self, obj):
+        return obj.max_minutes
+
+    def validate_maxHours(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("上限小时数必须为正数")
+        return value
+
+    def validate(self, attrs):
+        zone = attrs.get("zone") or getattr(self.instance, "zone", None)
+        work_date = attrs.get("work_date") or getattr(self.instance, "work_date", None)
+        if zone and work_date:
+            qs = FogDutyQuota.objects.filter(zone=zone, work_date=work_date)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {"workDate": "同一分区同一作业日的配额必须唯一"}
+                )
+        return attrs
+
+
+class FogQuotaConsumeSerializer(serializers.Serializer):
+    minutes = serializers.IntegerField(min_value=1)
+    humidityPct = serializers.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        validators=[MinValueValidator(70), MaxValueValidator(95)],
+    )
+    tempC = serializers.DecimalField(
+        max_digits=5, decimal_places=2, required=False, default=Decimal("25.00")
+    )
