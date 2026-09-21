@@ -5,7 +5,8 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core.models import ClimateLog, Greenhouse, IrrigationCycle, Zone
+from core.models import ClimateLog, FogQuota, Greenhouse, IrrigationCycle, Zone
+from core.services import QuotaExceededError, consume_fog_quota
 
 User = get_user_model()
 
@@ -162,9 +163,54 @@ class Command(BaseCommand):
             ]
         )
 
+        work_day = timezone.localdate()
+        q1 = FogQuota.objects.create(
+            zone=z1, work_date=work_day, max_hours=Decimal("2.00")
+        )
+        FogQuota.objects.create(zone=z2, work_date=work_day, max_hours=Decimal("1.50"))
+        FogQuota.objects.create(zone=z3, work_date=work_day, max_hours=Decimal("1.00"))
+        q4 = FogQuota.objects.create(
+            zone=z4, work_date=work_day, max_hours=Decimal("1.00")
+        )
+
+        # 成功消费一律走服务层:同一事务内扣减配额并追加气候记录(湿度 70~95)
+        consume_fog_quota(
+            quota_id=q1.id,
+            minutes=30,
+            temp_c=Decimal("24.00"),
+            humidity_pct=Decimal("82.00"),
+            par_umol=Decimal("410.00"),
+            co2_ppm=Decimal("640.00"),
+        )
+        consume_fog_quota(
+            quota_id=q4.id,
+            minutes=60,
+            temp_c=Decimal("21.50"),
+            humidity_pct=Decimal("88.00"),
+            par_umol=Decimal("360.00"),
+            co2_ppm=Decimal("590.00"),
+        )
+
+        # 超配额失败演示:q4 已用 60/60 分钟,再消费必然 409 回显已用
+        try:
+            consume_fog_quota(
+                quota_id=q4.id,
+                minutes=15,
+                temp_c=Decimal("21.50"),
+                humidity_pct=Decimal("88.00"),
+            )
+        except QuotaExceededError as exc:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"超配额失败(预期演示):{exc} —— 已用 {exc.used_minutes} 分钟,"
+                    f"本次请求 {exc.requested_minutes} 分钟"
+                )
+            )
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"种子完成：温室 {Greenhouse.objects.count()}，分区 {Zone.objects.count()}，"
-                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}"
+                f"气候 {ClimateLog.objects.count()}，轮灌 {IrrigationCycle.objects.count()}，"
+                f"雾化配额 {FogQuota.objects.count()}"
             )
         )
